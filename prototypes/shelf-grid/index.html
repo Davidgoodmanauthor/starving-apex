@@ -13,6 +13,8 @@ header{background:#1565C0;color:#fff;padding:12px 16px}header h1{margin:0;font-s
 #layer svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
 .h{position:absolute;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;touch-action:none;z-index:3}
 .h::after{content:"";position:absolute;inset:12px;border-radius:50%;background:#fff;border:4px solid #1565C0;box-shadow:0 1px 4px #0008}
+#crop{position:absolute;border:3px solid #fff;box-shadow:0 0 0 9999px rgba(0,0,0,.55);pointer-events:none;z-index:4}
+#crop .h{pointer-events:auto}
 .h.center::after{background:#FFB300;border-color:#fff;inset:8px}
 .h.shelf::after{background:#1565C0;border-color:#fff;border-radius:6px;inset:13px 6px}
 .panel{padding:14px 16px 30px}
@@ -31,15 +33,15 @@ ul{padding-left:18px;font-size:16px}li{margin:4px 0}
 @keyframes pulse{0%,100%{fill-opacity:.25}50%{fill-opacity:.75}}.pulse{animation:pulse .8s ease-in-out infinite}
 </style></head><body>
 <header><h1>Shelf Locator</h1><p>Track My Groceries prototype: know which shelf it's on</p></header>
-<nav class="steps"><button data-s="1">1 Photo</button><button data-s="2">2 Setup</button><button data-s="3">3 Fit grid</button><button data-s="4">4 Scan</button></nav>
-<div id="stage"><div id="layer"><img id="photo" alt="Cabinet"><svg id="svg" viewBox="0 0 1 1" preserveAspectRatio="none"></svg><div id="handles"></div></div></div>
+<nav class="steps"><button data-s="1">1 Photo</button><button data-s="1.5">2 Crop</button><button data-s="2">3 Setup</button><button data-s="3">4 Fit grid</button><button data-s="4">5 Scan</button></nav>
+<div id="stage"><div id="layer"><img id="photo" alt="Cabinet"><svg id="svg" viewBox="0 0 1 1" preserveAspectRatio="none"></svg><div id="handles"></div></div><div id="crop"><div class="h" data-k="k0" style="left:0;top:0"></div><div class="h" data-k="k1" style="left:100%;top:0"></div><div class="h" data-k="k2" style="left:100%;top:100%"></div><div class="h" data-k="k3" style="left:0;top:100%"></div></div></div>
 <div class="panel" id="panel"></div>
 <input type="file" id="file" accept="image/*" capture="environment" hidden><input type="file" id="file2" accept="image/*" hidden>
 <script>
 const KEY='tmgShelfGrid1',SAMPLE='cabinet.jpg';
 let S={photo:null,doors:2,shelves:3,quad:[[.08,.08],[.92,.08],[.92,.92],[.08,.92]],u:.5,vs:null,items:{}};
 try{Object.assign(S,JSON.parse(localStorage.getItem(KEY)||'{}'))}catch(e){}
-let step=1,view={x:0,y:0,s:1},curItem=null,found=null,flash=null;
+let crop={x:0,y:0,w:0,h:0},step=1,view={x:0,y:0,s:1},curItem=null,found=null,flash=null;
 const $=id=>document.getElementById(id),stage=$('stage'),layer=$('layer'),img=$('photo'),svg=$('svg'),hd=$('handles');
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){const p=S.photo;S.photo=null;try{localStorage.setItem(KEY,JSON.stringify(S))}catch(_){}S.photo=p}}
 function evenVs(){S.vs=[];for(let i=1;i<S.shelves;i++)S.vs.push(i/S.shelves)}
@@ -60,7 +62,7 @@ function draw(){let o='';const C=cols(),R=rows(),pts=a=>a.map(p=>p.join(',')).jo
  S.vs.forEach(v=>o+=ln(P(0,v),P(1,v),'#fff',3));
  o+=`<polygon points="${pts(S.quad)}" fill="none" stroke="#fff" stroke-width="4" vector-effect="non-scaling-stroke"/>`;
  if(S.doors==2)o+=ln(P(S.u,0),P(S.u,1),'#000a',9)+ln(P(S.u,0),P(S.u,1),'#FFB300',6);
- svg.innerHTML=step<2?'':o;
+ svg.innerHTML=step<2?'':o;showCrop();
  let h='';if(step==3){S.quad.forEach((p,i)=>h+=`<div class="h" data-k="q${i}" style="left:${p[0]*100}%;top:${p[1]*100}%"></div>`);
   if(S.doors==2){const m=P(S.u,.5);h+=`<div class="h center" data-k="u" style="left:${m[0]*100}%;top:${m[1]*100}%"></div>`}
   S.vs.forEach((v,i)=>{const m=P(S.doors==2?S.u/2:.5,v);h+=`<div class="h shelf" data-k="v${i}" style="left:${m[0]*100}%;top:${m[1]*100}%"></div>`})}
@@ -68,6 +70,14 @@ function draw(){let o='';const C=cols(),R=rows(),pts=a=>a.map(p=>p.join(',')).jo
 function norm(x,y){const r=layer.getBoundingClientRect();return[(x-r.left)/r.width,(y-r.top)/r.height]}
 function inPoly(p,poly){let ins=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const[a,b]=poly[i],[c,d]=poly[j];if((b>p[1])!=(d>p[1])&&p[0]<(c-a)*(p[1]-b)/(d-b)+a)ins=!ins}return ins}
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+function showCrop(){const c=$('crop');c.style.display=step==1.5?'block':'none';Object.assign(c.style,{left:crop.x+'px',top:crop.y+'px',width:crop.w+'px',height:crop.h+'px'})}
+function initCrop(){fit();const W=stage.clientWidth,H=stage.clientHeight;crop={x:W*.1,y:H*.08,w:W*.8,h:H*.84};showCrop()}
+function cropDrag(k,x,y){const sr=stage.getBoundingClientRect(),i=+k[1];x=clamp(x-sr.left,0,sr.width);y=clamp(y-sr.top,0,sr.height);
+ let l=crop.x,t=crop.y,r=crop.x+crop.w,b=crop.y+crop.h;if(i==0||i==3)l=Math.min(x,r-40);else r=Math.max(x,l+40);if(i<2)t=Math.min(y,b-40);else b=Math.max(y,t+40);
+ crop={x:l,y:t,w:r-l,h:b-t};showCrop()}
+function doCrop(){const lr=layer.getBoundingClientRect(),sr=stage.getBoundingClientRect(),k=Math.min(1600/crop.w,1600/crop.h,img.naturalWidth/lr.width*1.0001||1);
+ const c=document.createElement('canvas');c.width=Math.round(crop.w*k);c.height=Math.round(crop.h*k);const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);
+ g.drawImage(img,(lr.left-sr.left-crop.x)*k,(lr.top-sr.top-crop.y)*k,lr.width*k,lr.height*k);return c.toDataURL('image/jpeg',.85)}
 function dragTo(k,p){if(k[0]=='q'){S.quad[+k[1]]=[clamp(p[0],0,1),clamp(p[1],0,1)]}
  else if(k=='u'){const a=P(0,.5),b=P(1,.5);S.u=clamp((p[0]-a[0])/((b[0]-a[0])||1e-6),.1,.9)}
  else{const i=+k.slice(1),a=P(.5,0),b=P(.5,1);const lo=i?S.vs[i-1]+.04:.04,hi=i<S.vs.length-1?S.vs[i+1]-.04:.96;S.vs[i]=clamp((p[1]-a[1])/((b[1]-a[1])||1e-6),lo,hi)}draw()}
@@ -79,7 +89,7 @@ stage.addEventListener('pointerdown',e=>{stage.setPointerCapture(e.pointerId);pt
 function startGest(){const a=[...ptrs.values()];const c=a.reduce((s,p)=>[s[0]+p[0]/a.length,s[1]+p[1]/a.length],[0,0]);
  const d=a.length>1?Math.hypot(a[0][0]-a[1][0],a[0][1]-a[1][1]):0;gest={c,d,v:{...view}}}
 stage.addEventListener('pointermove',e=>{if(!ptrs.has(e.pointerId))return;ptrs.set(e.pointerId,[e.clientX,e.clientY]);
- if(drag){dragTo(drag,norm(e.clientX,e.clientY));return}
+ if(drag){if(drag[0]=='k')cropDrag(drag,e.clientX,e.clientY);else dragTo(drag,norm(e.clientX,e.clientY));return}
  if(tap&&Math.hypot(e.clientX-tap.x,e.clientY-tap.y)>10)tap=null;
  if(!gest)return;const a=[...ptrs.values()],c=a.reduce((s,p)=>[s[0]+p[0]/a.length,s[1]+p[1]/a.length],[0,0]);
  const sr=stage.getBoundingClientRect();let s=gest.v.s;
@@ -102,6 +112,8 @@ function render(){document.querySelectorAll('.steps button').forEach(b=>b.classL
  const p=$('panel');
  if(step==1)p.innerHTML=`<h2>Step 1: Photo of your cabinet</h2><p class="hint">Open the doors and take one straight-on photo. We loaded a sample cabinet for you.</p>
   <button class="btn wide" id="take">📷 Take photo</button><button class="btn wide" id="lib">🖼️ Choose from library</button><button class="btn alt wide" id="sample">Use sample photo</button><button class="btn wide" id="next">Next</button>`;
+ if(step==1.5)p.innerHTML=`<h2>Step 2: Crop your photo</h2><p class="hint">Drag the white corners to frame just the cabinet. Pinch to zoom, drag the photo to move it.</p>
+  <button class="btn wide" id="usecrop">✂️ Use this crop</button><button class="btn alt wide" id="skip">Skip</button>`;
  if(step==2)p.innerHTML=`<h2>Step 2: Quick setup</h2><p class="hint">How many doors?</p><div class="row"><button class="btn big ${S.doors==1?'sel':''}" data-d="1">1</button><button class="btn big ${S.doors==2?'sel':''}" data-d="2">2</button></div>
   <p class="hint">How many shelves?</p><div class="row stepper"><button id="minus">−</button><span>${S.shelves}</span><button id="plus">+</button></div><button class="btn wide" id="next">Next: fit the grid</button>`;
  if(step==3)p.innerHTML=`<h2>Step 3: Fit the grid</h2><p class="hint">Drag the white corners to the cabinet edges.${S.doors==2?' Drag the yellow line to where the doors meet.':''} Drag the blue tabs to line up each shelf. Pinch to zoom, drag the photo to move it.</p>
@@ -113,10 +125,12 @@ function render(){document.querySelectorAll('.steps button').forEach(b=>b.classL
   <h2 style="margin-top:18px">Find it</h2><input type="search" id="q" placeholder="Search, like pineapple"><div id="result"></div>
   ${saved.length?`<ul>${saved.map(([k,v])=>`<li><b>${k}</b> → ${label(...v)}</li>`).join('')}</ul><button class="btn alt" id="clear">Clear items</button>`:''}`}
  p.onclick=e=>{const t=e.target,id=t.id;
-  if(id=='next'){step++;if(step==3)fit();render()}
+  if(id=='usecrop'){const d=doCrop();S.photo=d;step=2;img.src=d;save();render();return}
+  if(id=='skip'){step=2;fit();render();return}
+  if(id=='next'){if(step==1){step=1.5;render();initCrop();return}step++;if(step==3)fit();render()}
   if(id=='take')$('file').click();
   if(id=='lib')$('file2').click();
-  if(id=='sample'){S.photo=null;img.src=SAMPLE;save()}
+  if(id=='sample'){S.photo=null;step=1.5;render();img.src=SAMPLE;save()}
   if(t.dataset.d){S.doors=+t.dataset.d;save();render()}
   if(id=='minus'||id=='plus'){S.shelves=clamp(S.shelves+(id=='plus'?1:-1),1,8);evenVs();save();render()}
   if(id=='reset'){S.quad=[[.08,.08],[.92,.08],[.92,.92],[.08,.92]];S.u=.5;evenVs();save();draw()}
@@ -127,9 +141,9 @@ function render(){document.querySelectorAll('.steps button').forEach(b=>b.classL
   if(s){const k=Object.keys(S.items).find(n=>n.toLowerCase().includes(s));if(k){found=S.items[k];msg='📍 '+k+': '+label(...found)}else msg='Not placed yet'}
   $('result').textContent=msg;draw()};
  draw()}
-document.querySelector('.steps').onclick=e=>{const s=+e.target.dataset.s;if(s){step=s;curItem=null;render()}};
+document.querySelector('.steps').onclick=e=>{const s=+e.target.dataset.s;if(s){step=s;curItem=null;render();if(s==1.5)initCrop()}};
 $('file').onchange=$('file2').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{
  const c=document.createElement('canvas'),k=Math.min(1,1200/Math.max(im.width,im.height));c.width=im.width*k;c.height=im.height*k;c.getContext('2d').drawImage(im,0,0,c.width,c.height);
- S.photo=c.toDataURL('image/jpeg',.8);S.items={};img.src=S.photo;save()};im.src=r.result};r.readAsDataURL(f)};
-img.onload=()=>{fit();draw()};img.src=S.photo||SAMPLE;addEventListener('resize',fit);render();
+ S.photo=c.toDataURL('image/jpeg',.8);S.items={};step=1.5;render();img.src=S.photo;save()};im.src=r.result};r.readAsDataURL(f)};
+img.onload=()=>{if(step==1.5)initCrop();else fit();draw()};img.src=S.photo||SAMPLE;addEventListener('resize',fit);render();
 </script></body></html>
