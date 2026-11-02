@@ -34,7 +34,7 @@ ul{padding-left:18px;font-size:16px}li{margin:4px 0}
 <nav class="steps"><button data-s="1">1 Photo</button><button data-s="2">2 Setup</button><button data-s="3">3 Fit grid</button><button data-s="4">4 Scan</button></nav>
 <div id="stage"><div id="layer"><img id="photo" alt="Cabinet"><svg id="svg" viewBox="0 0 1 1" preserveAspectRatio="none"></svg><div id="handles"></div></div></div>
 <div class="panel" id="panel"></div>
-<input type="file" id="file" accept="image/*" capture="environment" hidden>
+<input type="file" id="file" accept="image/*" capture="environment" hidden><input type="file" id="file2" accept="image/*" hidden>
 <script>
 const KEY='tmgShelfGrid1',SAMPLE='cabinet.jpg';
 let S={photo:null,doors:2,shelves:3,quad:[[.08,.08],[.92,.08],[.92,.92],[.08,.92]],u:.5,vs:null,items:{}};
@@ -101,7 +101,7 @@ const ITEMS=['Pineapple cake mix','Pineapple rings','Ragu','Idahoan potatoes','M
 function render(){document.querySelectorAll('.steps button').forEach(b=>b.classList.toggle('on',+b.dataset.s==step));
  const p=$('panel');
  if(step==1)p.innerHTML=`<h2>Step 1: Photo of your cabinet</h2><p class="hint">Open the doors and take one straight-on photo. We loaded a sample cabinet for you.</p>
-  <button class="btn wide" id="take">📷 Take/choose photo</button><button class="btn alt wide" id="sample">Use sample photo</button><button class="btn wide" id="next">Next</button>`;
+  <button class="btn wide" id="take">📷 Take photo</button><button class="btn wide" id="lib">🖼️ Choose from library</button><button class="btn alt wide" id="sample">Use sample photo</button><button class="btn wide" id="next">Next</button>`;
  if(step==2)p.innerHTML=`<h2>Step 2: Quick setup</h2><p class="hint">How many doors?</p><div class="row"><button class="btn big ${S.doors==1?'sel':''}" data-d="1">1</button><button class="btn big ${S.doors==2?'sel':''}" data-d="2">2</button></div>
   <p class="hint">How many shelves?</p><div class="row stepper"><button id="minus">−</button><span>${S.shelves}</span><button id="plus">+</button></div><button class="btn wide" id="next">Next: fit the grid</button>`;
  if(step==3)p.innerHTML=`<h2>Step 3: Fit the grid</h2><p class="hint">Drag the white corners to the cabinet edges.${S.doors==2?' Drag the yellow line to where the doors meet.':''} Drag the blue tabs to line up each shelf. Pinch to zoom, drag the photo to move it.</p>
@@ -115,6 +115,7 @@ function render(){document.querySelectorAll('.steps button').forEach(b=>b.classL
  p.onclick=e=>{const t=e.target,id=t.id;
   if(id=='next'){step++;if(step==3)fit();render()}
   if(id=='take')$('file').click();
+  if(id=='lib')$('file2').click();
   if(id=='sample'){S.photo=null;img.src=SAMPLE;save()}
   if(t.dataset.d){S.doors=+t.dataset.d;save();render()}
   if(id=='minus'||id=='plus'){S.shelves=clamp(S.shelves+(id=='plus'?1:-1),1,8);evenVs();save();render()}
@@ -127,7 +128,7 @@ function render(){document.querySelectorAll('.steps button').forEach(b=>b.classL
   $('result').textContent=msg;draw()};
  draw()}
 document.querySelector('.steps').onclick=e=>{const s=+e.target.dataset.s;if(s){step=s;curItem=null;render()}};
-$('file').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{
+$('file').onchange=$('file2').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{
  const c=document.createElement('canvas'),k=Math.min(1,1200/Math.max(im.width,im.height));c.width=im.width*k;c.height=im.height*k;c.getContext('2d').drawImage(im,0,0,c.width,c.height);
  S.photo=c.toDataURL('image/jpeg',.8);S.items={};img.src=S.photo;save()};im.src=r.result};r.readAsDataURL(f)};
 img.onload=()=>{fit();draw()};img.src=S.photo||SAMPLE;addEventListener('resize',fit);render();
