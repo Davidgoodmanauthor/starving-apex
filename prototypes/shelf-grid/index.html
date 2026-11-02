@@ -1,0 +1,134 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Shelf Locator Prototype | Track My Groceries</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;height:100%;font-family:system-ui,Roboto,sans-serif;background:#f4f7fc;color:#1a2a44}
+header{background:#1565C0;color:#fff;padding:12px 16px}header h1{margin:0;font-size:20px}header p{margin:2px 0 0;font-size:14px;opacity:.9}
+.steps{display:flex;gap:6px;padding:8px 10px;background:#fff;border-bottom:1px solid #dde5f2}
+.steps button{flex:1;border:0;border-radius:20px;padding:8px 4px;font-size:14px;font-weight:600;background:#e3ecf8;color:#1565C0}
+.steps button.on{background:#1565C0;color:#fff}
+#stage{position:relative;overflow:hidden;background:#222;height:52vh;touch-action:none;user-select:none;-webkit-user-select:none}
+#layer{position:absolute;left:0;top:0;transform-origin:0 0}
+#layer img{display:block;width:100%;height:100%;pointer-events:none}
+#layer svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.h{position:absolute;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;touch-action:none;z-index:3}
+.h::after{content:"";position:absolute;inset:12px;border-radius:50%;background:#fff;border:4px solid #1565C0;box-shadow:0 1px 4px #0008}
+.h.center::after{background:#FFB300;border-color:#fff;inset:8px}
+.h.shelf::after{background:#1565C0;border-color:#fff;border-radius:6px;inset:13px 6px}
+.panel{padding:14px 16px 30px}
+.panel h2{margin:0 0 10px;font-size:20px}.hint{font-size:15px;color:#4a5a74;margin:6px 0 12px}
+.btn{display:inline-block;border:0;border-radius:14px;padding:14px 18px;font-size:18px;font-weight:700;background:#1565C0;color:#fff;margin:4px 0}
+.btn.alt{background:#fff;color:#1565C0;border:2px solid #1565C0}.wide{width:100%}
+.row{display:flex;gap:10px;align-items:center}.big{flex:1;font-size:26px;padding:18px}
+.big.sel{background:#1565C0;color:#fff}.big:not(.sel){background:#fff;color:#1565C0;border:2px solid #1565C0}
+.stepper button{width:56px;height:56px;font-size:28px;border-radius:50%;border:0;background:#1565C0;color:#fff}
+.stepper span{font-size:30px;font-weight:700;min-width:50px;text-align:center}
+.chips{display:flex;flex-wrap:wrap;gap:8px}.chip{border:2px solid #1565C0;background:#fff;color:#1565C0;border-radius:20px;padding:10px 14px;font-size:16px;font-weight:600}
+.chip.on{background:#1565C0;color:#fff}
+input[type=search]{width:100%;font-size:18px;padding:12px;border-radius:12px;border:2px solid #b8cbe8}
+#result,#saved{font-size:17px;font-weight:600;color:#1565C0;margin:8px 0;min-height:22px}
+ul{padding-left:18px;font-size:16px}li{margin:4px 0}
+@keyframes pulse{0%,100%{fill-opacity:.25}50%{fill-opacity:.75}}.pulse{animation:pulse .8s ease-in-out infinite}
+</style></head><body>
+<header><h1>Shelf Locator</h1><p>Track My Groceries prototype: know which shelf it's on</p></header>
+<nav class="steps"><button data-s="1">1 Photo</button><button data-s="2">2 Setup</button><button data-s="3">3 Fit grid</button><button data-s="4">4 Scan</button></nav>
+<div id="stage"><div id="layer"><img id="photo" alt="Cabinet"><svg id="svg" viewBox="0 0 1 1" preserveAspectRatio="none"></svg><div id="handles"></div></div></div>
+<div class="panel" id="panel"></div>
+<input type="file" id="file" accept="image/*" capture="environment" hidden>
+<script>
+const KEY='tmgShelfGrid1',SAMPLE='cabinet.jpg';
+let S={photo:null,doors:2,shelves:3,quad:[[.08,.08],[.92,.08],[.92,.92],[.08,.92]],u:.5,vs:null,items:{}};
+try{Object.assign(S,JSON.parse(localStorage.getItem(KEY)||'{}'))}catch(e){}
+let step=1,view={x:0,y:0,s:1},curItem=null,found=null,flash=null;
+const $=id=>document.getElementById(id),stage=$('stage'),layer=$('layer'),img=$('photo'),svg=$('svg'),hd=$('handles');
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){const p=S.photo;S.photo=null;try{localStorage.setItem(KEY,JSON.stringify(S))}catch(_){}S.photo=p}}
+function evenVs(){S.vs=[];for(let i=1;i<S.shelves;i++)S.vs.push(i/S.shelves)}
+if(!S.vs||S.vs.length!==S.shelves-1)evenVs();
+const lerp=(a,b,t)=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t];
+function P(u,v){const q=S.quad;return lerp(lerp(q[0],q[1],u),lerp(q[3],q[2],u),v)}
+const cols=()=>S.doors==2?[0,S.u,1]:[0,1],rows=()=>[0,...S.vs,1];
+function label(c,r){const n=S.shelves;let sh=n==1?'Shelf':n==2?['Top','Bottom'][r]+' shelf':n==3?['Top','Middle','Bottom'][r]+' shelf':'Shelf '+(r+1);
+ return S.doors==2?(c?'Right':'Left')+' door, '+sh:sh}
+function cellPoly(c,r){const C=cols(),R=rows();return[P(C[c],R[r]),P(C[c+1],R[r]),P(C[c+1],R[r+1]),P(C[c],R[r+1])]}
+function fit(){const W=stage.clientWidth,H=stage.clientHeight,iw=img.naturalWidth||3,ih=img.naturalHeight||4;const k=Math.min(W/iw,H/ih);
+ layer.style.width=iw*k+'px';layer.style.height=ih*k+'px';view={s:1,x:(W-iw*k)/2,y:(H-ih*k)/2};applyView()}
+function applyView(){layer.style.transform=`translate(${view.x}px,${view.y}px) scale(${view.s})`;hd.querySelectorAll('.h').forEach(h=>h.style.transform=`scale(${1/view.s})`)}
+function draw(){let o='';const C=cols(),R=rows(),pts=a=>a.map(p=>p.join(',')).join(' ');
+ for(let c=0;c<C.length-1;c++)for(let r=0;r<R.length-1;r++){const hl=(found&&found[0]==c&&found[1]==r)||(flash&&flash[0]==c&&flash[1]==r);
+  o+=`<polygon data-c="${c}" data-r="${r}" points="${pts(cellPoly(c,r))}" fill="${hl?'#FFB300':'#1565C0'}" fill-opacity="${hl?.5:step==4&&curItem?.12:0}" class="${found&&hl?'pulse':''}"/>`}
+ const ln=(a,b,col,w)=>`<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${col}" stroke-width="${w}" vector-effect="non-scaling-stroke"/>`;
+ S.vs.forEach(v=>o+=ln(P(0,v),P(1,v),'#fff',3));
+ o+=`<polygon points="${pts(S.quad)}" fill="none" stroke="#fff" stroke-width="4" vector-effect="non-scaling-stroke"/>`;
+ if(S.doors==2)o+=ln(P(S.u,0),P(S.u,1),'#000a',9)+ln(P(S.u,0),P(S.u,1),'#FFB300',6);
+ svg.innerHTML=step<2?'':o;
+ let h='';if(step==3){S.quad.forEach((p,i)=>h+=`<div class="h" data-k="q${i}" style="left:${p[0]*100}%;top:${p[1]*100}%"></div>`);
+  if(S.doors==2){const m=P(S.u,.5);h+=`<div class="h center" data-k="u" style="left:${m[0]*100}%;top:${m[1]*100}%"></div>`}
+  S.vs.forEach((v,i)=>{const m=P(S.doors==2?S.u/2:.5,v);h+=`<div class="h shelf" data-k="v${i}" style="left:${m[0]*100}%;top:${m[1]*100}%"></div>`})}
+ hd.innerHTML=h;applyView()}
+function norm(x,y){const r=layer.getBoundingClientRect();return[(x-r.left)/r.width,(y-r.top)/r.height]}
+function inPoly(p,poly){let ins=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const[a,b]=poly[i],[c,d]=poly[j];if((b>p[1])!=(d>p[1])&&p[0]<(c-a)*(p[1]-b)/(d-b)+a)ins=!ins}return ins}
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+function dragTo(k,p){if(k[0]=='q'){S.quad[+k[1]]=[clamp(p[0],0,1),clamp(p[1],0,1)]}
+ else if(k=='u'){const a=P(0,.5),b=P(1,.5);S.u=clamp((p[0]-a[0])/((b[0]-a[0])||1e-6),.1,.9)}
+ else{const i=+k.slice(1),a=P(.5,0),b=P(.5,1);const lo=i?S.vs[i-1]+.04:.04,hi=i<S.vs.length-1?S.vs[i+1]-.04:.96;S.vs[i]=clamp((p[1]-a[1])/((b[1]-a[1])||1e-6),lo,hi)}draw()}
+// pointers
+const ptrs=new Map();let drag=null,gest=null,tap=null;
+stage.addEventListener('pointerdown',e=>{stage.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,[e.clientX,e.clientY]);
+ const h=e.target.closest('.h');if(h&&ptrs.size==1){drag=h.dataset.k;return}
+ drag=null;tap=ptrs.size==1?{x:e.clientX,y:e.clientY}:null;startGest()});
+function startGest(){const a=[...ptrs.values()];const c=a.reduce((s,p)=>[s[0]+p[0]/a.length,s[1]+p[1]/a.length],[0,0]);
+ const d=a.length>1?Math.hypot(a[0][0]-a[1][0],a[0][1]-a[1][1]):0;gest={c,d,v:{...view}}}
+stage.addEventListener('pointermove',e=>{if(!ptrs.has(e.pointerId))return;ptrs.set(e.pointerId,[e.clientX,e.clientY]);
+ if(drag){dragTo(drag,norm(e.clientX,e.clientY));return}
+ if(tap&&Math.hypot(e.clientX-tap.x,e.clientY-tap.y)>10)tap=null;
+ if(!gest)return;const a=[...ptrs.values()],c=a.reduce((s,p)=>[s[0]+p[0]/a.length,s[1]+p[1]/a.length],[0,0]);
+ const sr=stage.getBoundingClientRect();let s=gest.v.s;
+ if(a.length>1&&gest.d){s=clamp(gest.v.s*Math.hypot(a[0][0]-a[1][0],a[0][1]-a[1][1])/gest.d,.5,6)}
+ const gx=gest.c[0]-sr.left,gy=gest.c[1]-sr.top;
+ view.s=s;view.x=c[0]-sr.left-(gx-gest.v.x)*s/gest.v.s;view.y=c[1]-sr.top-(gy-gest.v.y)*s/gest.v.s;applyView()});
+function up(e){if(!ptrs.has(e.pointerId))return;ptrs.delete(e.pointerId);
+ if(drag){drag=null;save();return}
+ if(tap&&ptrs.size==0)onTap(norm(e.clientX,e.clientY));tap=null;gest=null;if(ptrs.size)startGest()}
+stage.addEventListener('pointerup',up);stage.addEventListener('pointercancel',up);
+stage.addEventListener('wheel',e=>{e.preventDefault();const sr=stage.getBoundingClientRect(),x=e.clientX-sr.left,y=e.clientY-sr.top,s=clamp(view.s*(e.deltaY<0?1.1:.9),.5,6);
+ view.x=x-(x-view.x)*s/view.s;view.y=y-(y-view.y)*s/view.s;view.s=s;applyView()},{passive:false});
+function cellAt(p){const C=cols(),R=rows();for(let c=0;c<C.length-1;c++)for(let r=0;r<R.length-1;r++)if(inPoly(p,cellPoly(c,r)))return[c,r];return null}
+function onTap(p){if(step!=4||!curItem)return;const cell=cellAt(p);if(!cell)return;
+ S.items[curItem]=cell;save();flash=cell;found=null;const msg='Saved: '+curItem+' → '+label(...cell);
+ setTimeout(()=>{flash=null;draw()},1200);curItem=null;render();$('saved').textContent=msg}
+// panels
+const ITEMS=['Pineapple cake mix','Pineapple rings','Ragu','Idahoan potatoes','Minute rice','Mayo','Green beans','Zatarain\'s'];
+function render(){document.querySelectorAll('.steps button').forEach(b=>b.classList.toggle('on',+b.dataset.s==step));
+ const p=$('panel');
+ if(step==1)p.innerHTML=`<h2>Step 1: Photo of your cabinet</h2><p class="hint">Open the doors and take one straight-on photo. We loaded a sample cabinet for you.</p>
+  <button class="btn wide" id="take">📷 Take/choose photo</button><button class="btn alt wide" id="sample">Use sample photo</button><button class="btn wide" id="next">Next</button>`;
+ if(step==2)p.innerHTML=`<h2>Step 2: Quick setup</h2><p class="hint">How many doors?</p><div class="row"><button class="btn big ${S.doors==1?'sel':''}" data-d="1">1</button><button class="btn big ${S.doors==2?'sel':''}" data-d="2">2</button></div>
+  <p class="hint">How many shelves?</p><div class="row stepper"><button id="minus">−</button><span>${S.shelves}</span><button id="plus">+</button></div><button class="btn wide" id="next">Next: fit the grid</button>`;
+ if(step==3)p.innerHTML=`<h2>Step 3: Fit the grid</h2><p class="hint">Drag the white corners to the cabinet edges.${S.doors==2?' Drag the yellow line to where the doors meet.':''} Drag the blue tabs to line up each shelf. Pinch to zoom, drag the photo to move it.</p>
+  <button class="btn alt wide" id="reset">Reset grid</button><button class="btn wide" id="next">Looks good</button>`;
+ if(step==4){const saved=Object.entries(S.items);p.innerHTML=`<h2>Step 4: Scan an item</h2>
+  ${curItem?`<p class="hint" style="color:#1565C0;font-weight:700">Where are you putting ${curItem}? Tap its spot on the photo.</p>`:`<p class="hint">Tap "Scan item" or pick a sample product, then tap where it goes.</p>`}
+  <button class="btn wide" id="scan">📷 Scan item</button>
+  <div id="saved"></div><div class="chips">${ITEMS.map(i=>`<button class="chip ${curItem==i?'on':''}" data-i="${i}">${S.items[i]?'✓ ':''}${i}</button>`).join('')}</div>
+  <h2 style="margin-top:18px">Find it</h2><input type="search" id="q" placeholder="Search, like pineapple"><div id="result"></div>
+  ${saved.length?`<ul>${saved.map(([k,v])=>`<li><b>${k}</b> → ${label(...v)}</li>`).join('')}</ul><button class="btn alt" id="clear">Clear items</button>`:''}`}
+ p.onclick=e=>{const t=e.target,id=t.id;
+  if(id=='next'){step++;if(step==3)fit();render()}
+  if(id=='take')$('file').click();
+  if(id=='sample'){S.photo=null;img.src=SAMPLE;save()}
+  if(t.dataset.d){S.doors=+t.dataset.d;save();render()}
+  if(id=='minus'||id=='plus'){S.shelves=clamp(S.shelves+(id=='plus'?1:-1),1,8);evenVs();save();render()}
+  if(id=='reset'){S.quad=[[.08,.08],[.92,.08],[.92,.92],[.08,.92]];S.u=.5;evenVs();save();draw()}
+  if(t.dataset.i){curItem=t.dataset.i;found=null;render()}
+  if(id=='scan'){curItem=ITEMS.find(i=>!S.items[i])||ITEMS[0];found=null;render()}
+  if(id=='clear'){S.items={};save();render()}};
+ const q=$('q');if(q)q.oninput=()=>{const s=q.value.trim().toLowerCase();found=null;let msg='';
+  if(s){const k=Object.keys(S.items).find(n=>n.toLowerCase().includes(s));if(k){found=S.items[k];msg='📍 '+k+': '+label(...found)}else msg='Not placed yet'}
+  $('result').textContent=msg;draw()};
+ draw()}
+document.querySelector('.steps').onclick=e=>{const s=+e.target.dataset.s;if(s){step=s;curItem=null;render()}};
+$('file').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{
+ const c=document.createElement('canvas'),k=Math.min(1,1200/Math.max(im.width,im.height));c.width=im.width*k;c.height=im.height*k;c.getContext('2d').drawImage(im,0,0,c.width,c.height);
+ S.photo=c.toDataURL('image/jpeg',.8);S.items={};img.src=S.photo;save()};im.src=r.result};r.readAsDataURL(f)};
+img.onload=()=>{fit();draw()};img.src=S.photo||SAMPLE;addEventListener('resize',fit);render();
+</script></body></html>
