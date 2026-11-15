@@ -9,3 +9,5 @@ Embed example:
 <video src="https://davidgoodmanauthor.github.io/starving-apex/videos/FILE-NAME.mp4" controls playsinline></video>
 
 Limits: GitHub rejects any single file over 100 MB, and uploads through the GitHub website are capped at 25 MB per file. Use lowercase names with dashes, like brake-job-step-1.mp4.
+
+All files in this repo are committed as Starving Apex Productions <starvingapex@gmail.com>.
