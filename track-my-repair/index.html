@@ -10819,8 +10819,18 @@ body.tmr-fs-rotate { overflow: hidden; }
     reader.readAsText(file);
   });
   document.getElementById("resetSample").addEventListener("click", function () {
-    window.TMT.reset();
-    showToast("Sample jobs restored.");
+    openModal({
+      title: "Reset to sample data?",
+      body: "<p>This will delete all of your saved jobs on this device and replace them with the sample data. Your notes, marks, steps, and tools will be gone. This cannot be undone.</p>",
+      actions: '<button class="btn secondary" data-close>Cancel</button><button class="btn rose" id="confirmResetSample">Delete all and reset</button>',
+      bind: function (root) {
+        root.querySelector("#confirmResetSample").addEventListener("click", function () {
+          closeModal();
+          window.TMT.reset();
+          showToast("Sample jobs restored.");
+        });
+      }
+    });
   });
   window.addEventListener("hashchange", function () {
     try { if (location.hash && location.hash !== currentHash) { currentHash = location.hash; render(); } } catch (e) {}
